@@ -1,0 +1,96 @@
+
+# 1. Import Required Libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy.stats import zscore
+import warnings
+warnings.filterwarnings("ignore")
+
+# 2. Load the Dataset
+df = pd.read_csv("../data/benin.csv", parse_dates=['Timestamp'])
+
+# 3. Basic Overview
+print(df.shape)
+print(df.info())
+df.head()
+
+#  4. Summary Statistics
+df.describe()
+
+#  5. Missing Value Report
+missing = df.isna().sum()
+missing[missing > 0].sort_values(ascending=False)
+
+# 6. Drop or Impute Columns with > 5% Missing
+threshold = len(df) * 0.05
+df_clean = df.dropna(thresh=threshold, axis=1)
+
+# Impute numeric missing values with median
+for col in df_clean.select_dtypes(include=np.number).columns:
+    df_clean[col].fillna(df_clean[col].median(), inplace=True)
+
+#  7. Outlier Detection using Z-Score
+z_cols = ['GHI', 'DNI', 'DHI', 'ModA', 'ModB', 'WS', 'WSgust']
+df_clean['outlier_flag'] = (np.abs(zscore(df_clean[z_cols])) > 3).any(axis=1)
+print("Outliers found:", df_clean['outlier_flag'].sum())
+
+#  remove outliers
+df_clean = df_clean[df_clean['outlier_flag'] == False]
+df_clean.drop(columns=['outlier_flag'], inplace=True)
+
+# 8. Time Series Plots
+plt.figure(figsize=(14, 5))
+for col in ['GHI', 'DNI', 'DHI', 'Tamb']:
+    plt.plot(df_clean['Timestamp'], df_clean[col], label=col)
+plt.legend()
+plt.title("Solar Irradiance and Ambient Temperature Over Time")
+plt.xlabel("Timestamp")
+plt.ylabel("W/m² or °C")
+plt.grid(True)
+plt.show()
+
+# 9. Cleaning Impact
+cleaning_avg = df_clean.groupby("Cleaning")[['ModA', 'ModB']].mean()
+cleaning_avg.plot(kind="bar", title="ModA & ModB: Cleaning Impact", ylabel="Irradiance (W/m²)", xlabel="Cleaned (0=No, 1=Yes)")
+plt.grid(True)
+plt.show()
+
+# 10. Correlation Heatmap
+plt.figure(figsize=(10, 6))
+corr = df_clean[['GHI', 'DNI', 'DHI', 'TModA', 'TModB']].corr()
+sns.heatmap(corr, annot=True, cmap='coolwarm')
+plt.title("Correlation Heatmap")
+plt.show()
+
+# 11. Scatter Plots
+sns.scatterplot(x='WS', y='GHI', data=df_clean)
+plt.title("Wind Speed vs GHI")
+plt.grid(True)
+plt.show()
+
+sns.scatterplot(x='RH', y='Tamb', data=df_clean)
+plt.title("Humidity vs Temperature")
+plt.grid(True)
+plt.show()
+
+# 13. Histogram & Distribution
+df_clean['GHI'].hist(bins=30, alpha=0.7)
+plt.title("Distribution of GHI")
+plt.xlabel("GHI (W/m²)")
+plt.ylabel("Frequency")
+plt.grid(True)
+plt.show()
+
+# 14. Bubble Plot
+plt.figure(figsize=(10, 6))
+bubble = plt.scatter(df_clean['Tamb'], df_clean['GHI'], s=df_clean['RH'], alpha=0.5)
+plt.title("GHI vs Tamb (Bubble size = RH)")
+plt.xlabel("Ambient Temperature (°C)")
+plt.ylabel("GHI (W/m²)")
+plt.grid(True)
+plt.show()
+
+# 15. Export Cleaned Data
+df_clean.to_csv("../data/benin_clean.csv", index=False)
